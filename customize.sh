@@ -12,10 +12,10 @@ rm -f $MODPATH/system/vendor/firmware/carrierconfig/cfg.db || abort "Failed to d
 chmod +x $MODPATH/tools/sqlite3 || abort "Failed to change chmod to +x for sqlite3!"
 cp -a /vendor/firmware/carrierconfig/cfg.db $MODPATH/system/vendor/firmware/carrierconfig/ || abort "Failed to copy cfg.db!"
 SQL="
--- Находим confman для it_iliad (carrier_id = 2124)
+-- edit to Telia (carrier_id = 656)
 WITH target_confman AS (
     SELECT confman FROM confmap WHERE carrier_id = (
-        SELECT carrier_id FROM confnames WHERE name = 'it_iliad'
+        SELECT carrier_id FROM confnames WHERE name = 'Telia'
     )
 )
 -- Обновляем конфигурации для WILDCARD (0), PTCRB (20001), и PTCRB_ROW (20005)
