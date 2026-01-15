@@ -4,6 +4,8 @@
 
 原项目致谢部分：
 
+ps：但是现在的逻辑已经不是下面所述了，现在是修改 regional_fallback 而不是将基础配置文件的配置改为 it_iliad 的
+
 ### The module is inspired by the following modules and the working principle is taken from them (thanks to the authors):
 Universal Modem Fix
 Pixel-mdm-patch
