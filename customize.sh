@@ -20,7 +20,6 @@ ui_print "- Using sqlite3: $SQLITE"
 ui_print "- DB path: $DB_PATH"
 
 FALLBACK_CARRIER_ID=656
-TARGET_CARRIER_INFO=23820
 TABLE_CHECK=$($SQLITE "$DB_PATH" "SELECT name FROM sqlite_master WHERE type='table' AND name='regional_fallback';" 2>&1) || {
     ui_print "! sqlite3 error during table check: $TABLE_CHECK"
     abort "Failed to open cfg.db!"
@@ -61,7 +60,7 @@ ui_print "- Using carrier key column: $FILTER_COL"
 # Decide the update condition based on available columns
 UPDATE_COND=""
 if [ "$FILTER_COL" = "carrier_info" ] || [ "$FILTER_COL" = "carrierid" ]; then
-    UPDATE_COND="$FILTER_COL = $TARGET_CARRIER_INFO"
+    UPDATE_COND="$FILTER_COL = 23820"
 else
     # Table only has carrier_id/country_code; replace legacy 0 fallback with Telia
     UPDATE_COND="carrier_id = '0' OR country_code = '0'"
@@ -71,7 +70,7 @@ ui_print "- Using update condition: $UPDATE_COND"
 SQL="
 PRAGMA journal_mode=delete;
 PRAGMA busy_timeout=2000;
--- Force fallback carrier to Telia (carrier_id = 656) using Denmark Telia entry (carrier_info = 23820)
+-- Force fallback carrier to Telia (carrier_id = 656)
 UPDATE regional_fallback
 SET carrier_id = $FALLBACK_CARRIER_ID
 WHERE $UPDATE_COND;
