@@ -19,63 +19,62 @@ rm -f "$DB_PATH-wal" "$DB_PATH-shm" 2>/dev/null
 ui_print "- Using sqlite3: $SQLITE"
 ui_print "- DB path: $DB_PATH"
 
-FALLBACK_CARRIER_ID=656
-TABLE_CHECK=$($SQLITE "$DB_PATH" "SELECT name FROM sqlite_master WHERE type='table' AND name='regional_fallback';" 2>&1) || {
+PARENT_ID=20033
+CHILD_IDS="1435 1436"
+
+TABLE_CHECK=$($SQLITE "$DB_PATH" "SELECT name FROM sqlite_master WHERE type='table' AND name='carrier_parent';" 2>&1) || {
     ui_print "! sqlite3 error during table check: $TABLE_CHECK"
     abort "Failed to open cfg.db!"
 }
 ui_print "- Table check result: $TABLE_CHECK"
-[ "$TABLE_CHECK" = "regional_fallback" ] || abort "Table regional_fallback not found in cfg.db!"
+[ "$TABLE_CHECK" = "carrier_parent" ] || abort "Table carrier_parent not found in cfg.db!"
 
-TABLE_INFO=$($SQLITE "$DB_PATH" "PRAGMA table_info(regional_fallback);" 2>&1) || {
+RF_TABLE_CHECK=$($SQLITE "$DB_PATH" "SELECT name FROM sqlite_master WHERE type='table' AND name='regional_fallback';" 2>&1) || {
+    ui_print "! sqlite3 error during table check: $RF_TABLE_CHECK"
+    abort "Failed to open cfg.db!"
+}
+ui_print "- Table check result: $RF_TABLE_CHECK"
+[ "$RF_TABLE_CHECK" = "regional_fallback" ] || abort "Table regional_fallback not found in cfg.db!"
+
+TABLE_INFO=$($SQLITE "$DB_PATH" "PRAGMA table_info(carrier_parent);" 2>&1) || {
     ui_print "! sqlite3 error during table_info:"
     ui_print "$TABLE_INFO"
     abort "Failed to open cfg.db!"
 }
-ui_print "- regional_fallback table_info:"
+ui_print "- carrier_parent table_info:"
 ui_print "$TABLE_INFO"
 
-SCHEMA=$($SQLITE "$DB_PATH" "SELECT sql FROM sqlite_master WHERE type='table' AND name='regional_fallback';" 2>&1)
-ui_print "- regional_fallback schema:"
+SCHEMA=$($SQLITE "$DB_PATH" "SELECT sql FROM sqlite_master WHERE type='table' AND name='carrier_parent';" 2>&1)
+ui_print "- carrier_parent schema:"
 ui_print "$SCHEMA"
 
-SAMPLE_ROWS=$($SQLITE "$DB_PATH" "SELECT * FROM regional_fallback LIMIT 5;" 2>&1)
-ui_print "- regional_fallback sample rows (up to 5):"
+SAMPLE_ROWS=$($SQLITE "$DB_PATH" "SELECT * FROM carrier_parent LIMIT 5;" 2>&1)
+ui_print "- carrier_parent sample rows (up to 5):"
 ui_print "$SAMPLE_ROWS"
 
-echo "$TABLE_INFO" | grep -q "|carrier_id|" || abort "Column carrier_id not found in regional_fallback!"
-
-FILTER_COL=""
-case "$TABLE_INFO" in
-  *"|carrier_info|"*) FILTER_COL="carrier_info" ;;
-  *"|carrierid|"*) FILTER_COL="carrierid" ;;
-  *"|carrier_id|"*) FILTER_COL="carrier_id" ;;
-esac
-if [ -z "$FILTER_COL" ]; then
-    ui_print "! Could not detect carrier key column in regional_fallback."
-    abort "Unsupported regional_fallback schema, cannot patch."
-fi
-ui_print "- Using carrier key column: $FILTER_COL"
-
-# Decide the update condition based on available columns
-UPDATE_COND=""
-if [ "$FILTER_COL" = "carrier_info" ] || [ "$FILTER_COL" = "carrierid" ]; then
-    UPDATE_COND="$FILTER_COL = 23820"
-else
-    # Table only has carrier_id/country_code; replace legacy 0 fallback with Telia
-    UPDATE_COND="carrier_id = '0' OR country_code = '0'"
-fi
-ui_print "- Using update condition: $UPDATE_COND"
+echo "$TABLE_INFO" | grep -q "|carrier_id|" || abort "Column carrier_id not found in carrier_parent!"
+echo "$TABLE_INFO" | grep -q "|parent_id|" || abort "Column parent_id not found in carrier_parent!"
+RF_TABLE_INFO=$($SQLITE "$DB_PATH" "PRAGMA table_info(regional_fallback);" 2>&1) || {
+    ui_print "! sqlite3 error during table_info (regional_fallback):"
+    ui_print "$RF_TABLE_INFO"
+    abort "Failed to open cfg.db!"
+}
+echo "$RF_TABLE_INFO" | grep -q "|carrier_id|" || abort "Column carrier_id not found in regional_fallback!"
+ui_print "- Target parent_id: $PARENT_ID"
+ui_print "- Target child carrier_ids: $CHILD_IDS"
 
 SQL="
 PRAGMA journal_mode=delete;
 PRAGMA busy_timeout=2000;
--- Force fallback carrier to Telia (carrier_id = 656)
-UPDATE regional_fallback
-SET carrier_id = $FALLBACK_CARRIER_ID
-WHERE $UPDATE_COND;
+-- Insert/replace parent mapping
+INSERT OR REPLACE INTO carrier_parent (carrier_id, parent_id) VALUES
+  (1435, $PARENT_ID),
+  (1436, $PARENT_ID);
 SELECT changes();
-SELECT 'after', country_code, carrier_id FROM regional_fallback LIMIT 5;
+SELECT 'after', carrier_id, parent_id FROM carrier_parent WHERE carrier_id IN (1435, 1436);
+-- Update regional_fallback default (replace 0 with parent_id)
+UPDATE regional_fallback SET carrier_id = $PARENT_ID WHERE carrier_id = '0' OR country_code = '0';
+SELECT 'after_fallback', country_code, carrier_id FROM regional_fallback LIMIT 5;
 "
 PATCH_RESULT=$($SQLITE "$DB_PATH" "$SQL" 2>&1) || {
     ui_print "! sqlite3 error during patch:"
